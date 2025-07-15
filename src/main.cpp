@@ -6,11 +6,10 @@
 #include <csignal>
 #include <unistd.h>
 #include <termios.h>
-#include "input.hpp"
+#include "keyboard.hpp"
 
 void signal_handler( int signal )
 {
-    // gSignalStatus = signal;
     std::puts("interrupted");
     exit(0);
 }
@@ -19,14 +18,14 @@ int main( int argc, char **argv )
 {
     std::signal(SIGINT, signal_handler);
 
-    input input;
-    std::puts( "hi" );
+    input::keyboard keyboard;
+    std::cout << "hi\r\n";
 
-    for( char key : input.keys() )
+    for( auto word : keyboard.lines() )
     {
-        std::cout << std::format( "input: {}\n", key );
+        std::cout << "\rgot a word: " << word << "\r\n";
     }
 
-    std::puts( "bye" );
+    std::cout << "bye\r\n";
     return 0;
 }
