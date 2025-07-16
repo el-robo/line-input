@@ -17,17 +17,15 @@ void signal_handler( int signal )
 
 int main( int argc, char **argv )
 {
-    // std::signal(SIGINT, signal_handler);
-
     input::keyboard keyboard;
-    std::cout << "hi\r\n";
+
+    console::write_line( "hi" );
 
     for( auto line : keyboard.lines() )
     {
         console::write_line( "\rgot a line: {}", line );
-        // std::cout << "\rgot a word: " << word << "\r\n";
     }
 
-    std::cout << "bye\r\n";
+    console::write_line( "bye" );
     return 0;
 }

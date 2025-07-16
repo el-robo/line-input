@@ -14,7 +14,7 @@ struct keyboard
 
     char read_key();
     std::generator< char > keys();
-    std::generator< std::pair<char, bool> > filtered_keys();
+    std::generator< std::pair< char, bool > > filtered_keys();
     std::generator< std::string_view > lines();
 };
 

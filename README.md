@@ -7,3 +7,6 @@ interesting stuff to use:
 - std async
 - ranges
 - fold expressions
+
+https://web.archive.org/web/20121225024852/http://www.climagic.org/mirrors/VT100_Escape_Codes.html
+https://gist.github.com/ConnerWill/d4b6c776b509add763e17f9f113fd25b

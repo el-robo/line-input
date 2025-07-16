@@ -6,7 +6,9 @@
 #include <cstdlib>
 #include <deque>
 #include <iostream>
+#include <iterator>
 #include <sstream>
+#include <string>
 #include <termios.h>
 #include <unistd.h>
 
@@ -63,8 +65,6 @@ namespace input
         {
             co_yield read_key();
         }
-
-        console::write_line( "key inputs done" );
     }
 
     namespace keycode
@@ -108,17 +108,57 @@ namespace input
         }
     }
 
+    struct buffer
+    {
+        std::string line;
+        std::string::iterator pos = line.begin();
+
+        std::string cycle()
+        {
+            std::string result = line;
+            line.clear();
+            pos = line.begin();
+            return result;
+        }
+
+        size_t size() const
+        {
+            return line.size();
+        }
+
+        size_t position()
+        {
+            return static_cast< size_t >( std::distance< std::string::iterator >( line.begin(), pos ) );
+        }
+
+        void insert( char input )
+        {
+            line.insert( pos++, input );
+            std::cout << input << std::flush;
+        }
+
+        void move( size_t offset )
+        {
+            pos = line.begin() + offset;
+            std::cout << console::cursor::to_column( offset ) << std::flush;
+        }
+
+        void restore()
+        {
+            // restore state
+        }
+    };
 
     std::generator< std::string_view > keyboard::lines()
     {
-        std::stringstream stream;
+        buffer line;
 
         for( auto [input, is_special] : filtered_keys() )
         {
             if( !is_special )
             {
-                std::cout << input << std::flush;
-                stream << input;
+                // std::cout << input << std::flush;
+                line.insert( input );
                 continue;
             }
 
@@ -137,26 +177,42 @@ namespace input
                     }
                     break;
                 }
+                case keycode::key_home:
+                {
+                    line.move( 0 );
+                    break;
+                }
+                case keycode::key_end:
+                {
+                    line.move( line.size() + 1 );
+                    break;
+                }
+                case keycode::key_left:
+                {
+                    line.move( std::max< int >( 0, line.position() - 1 ) );
+                    break;
+                }
+                case keycode::key_right:
+                {
+                    line.move( std::min< int >( line.size() + 1, line.position() + 1 ) );
+                    break;
+                }
                 case keycode::key_backspace:
                 {
                     break;
                 }
                 case keycode::key_return:
                 {
-                    co_yield stream.str();
-                    stream.str("");
+                    co_yield line.cycle();
                     continue;
                 }
                 case keycode::key_tab:
                 {
-                    std::cout << "tab!\r\n";
-                    co_yield stream.str();
-                    stream.str("");
                     continue;
                 }
                 default:
                 {
-                    console::write_line( "{} is a control character", static_cast< int >( input ) );
+                    console::write_line( "\r{} is a control character", static_cast< int >( input ) );
                     continue;
                 }
             }
