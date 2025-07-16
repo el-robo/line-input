@@ -6,3 +6,4 @@ interesting stuff to use:
 - jthreads
 - std async
 - ranges
+- fold expressions

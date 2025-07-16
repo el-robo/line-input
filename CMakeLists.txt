@@ -4,6 +4,7 @@ set( CMAKE_CXX_STANDARD 23 )
 
 add_executable( completor
     src/main.cpp
+    src/console.cpp
     src/keyboard.cpp
 )
 

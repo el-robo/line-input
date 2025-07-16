@@ -6,6 +6,7 @@
 #include <csignal>
 #include <unistd.h>
 #include <termios.h>
+#include "console.hpp"
 #include "keyboard.hpp"
 
 void signal_handler( int signal )
@@ -16,14 +17,15 @@ void signal_handler( int signal )
 
 int main( int argc, char **argv )
 {
-    std::signal(SIGINT, signal_handler);
+    // std::signal(SIGINT, signal_handler);
 
     input::keyboard keyboard;
     std::cout << "hi\r\n";
 
-    for( auto word : keyboard.lines() )
+    for( auto line : keyboard.lines() )
     {
-        std::cout << "\rgot a word: " << word << "\r\n";
+        console::write_line( "\rgot a line: {}", line );
+        // std::cout << "\rgot a word: " << word << "\r\n";
     }
 
     std::cout << "bye\r\n";
