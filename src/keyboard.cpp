@@ -4,6 +4,7 @@
 #include <cctype>
 #include <cstdio>
 #include <cstdlib>
+#include <deque>
 #include <iostream>
 #include <sstream>
 #include <termios.h>
@@ -33,20 +34,34 @@ namespace input
         tcsetattr( STDIN_FILENO, TCSAFLUSH, &raw );
     }
 
-    std::generator< char > keyboard::keys()
+    keyboard::keyboard()
     {
         tcgetattr( STDIN_FILENO, &orig_termios );
         std::atexit(disable_raw_mode);
 
         enable_raw_mode();
+    }
 
-        char input;
+    char keyboard::read_key()
+    {
+        char input = '\0';
+
         while( active )
         {
             if( read( STDIN_FILENO, &input, 1 ) == 1 )
             {
-                co_yield input;
+                break;
             }
+        }
+
+        return input;
+    }
+
+    std::generator< char > keyboard::keys()
+    {
+        while( active )
+        {
+            co_yield read_key();
         }
 
         console::write_line( "key inputs done" );
@@ -55,74 +70,94 @@ namespace input
     namespace keycode
     {
         static constexpr char key_interrupt = 3;
+        static constexpr char key_end_of_input = 4;
         static constexpr char key_tab = 9;
         static constexpr char key_return = 13;
         static constexpr char read_more = 27;
         static constexpr char key_backspace = 127;
+
+        // keys with the '[' special prefix
+        static constexpr char key_up = 'A';
+        static constexpr char key_down = 'B';
+        static constexpr char key_right = 'C';
+        static constexpr char key_left = 'D';
+        static constexpr char key_home = 'H';
+        static constexpr char key_end = 'F';
+        static constexpr char key_insert = '3';
+        static constexpr char key_delete = '3';
     }
+
+    std::generator< std::pair<char, bool> > keyboard::filtered_keys()
+    {
+        for( char input : keys() )
+        {
+            if( !std::iscntrl( input ) )
+            {
+                co_yield { input, false };
+                continue;
+            }
+            else if( input == keycode::read_more )
+            {
+                const std::array< char, 2 > special { read_key(), read_key() };
+                co_yield { special[1], true };
+            }
+            else
+            {
+                co_yield { input, true };
+            }
+        }
+    }
+
 
     std::generator< std::string_view > keyboard::lines()
     {
         std::stringstream stream;
-        bool read_more = false;
 
-        while( active )
+        for( auto [input, is_special] : filtered_keys() )
         {
-            for( char key : keys() )
+            if( !is_special )
             {
-                if( read_more )
+                std::cout << input << std::flush;
+                stream << input;
+                continue;
+            }
+
+            switch( input )
+            {
+                case keycode::key_end_of_input:
+                case keycode::key_interrupt:
                 {
-                    read_more = false;
-                    console::write_line( "\r\nspecial thing found: {}", key );
+                    if( on_interrupt )
+                    {
+                        on_interrupt();
+                    }
+                    else
+                    {
+                        active = false;
+                    }
+                    break;
+                }
+                case keycode::key_backspace:
+                {
+                    break;
+                }
+                case keycode::key_return:
+                {
+                    co_yield stream.str();
+                    stream.str("");
                     continue;
                 }
-
-                if( !std::iscntrl( key ) )
+                case keycode::key_tab:
                 {
-                    std::cout << key << std::flush;
-                    stream << key;
+                    std::cout << "tab!\r\n";
+                    co_yield stream.str();
+                    stream.str("");
                     continue;
                 }
-
-                switch( key )
+                default:
                 {
-                    case keycode::key_interrupt:
-                    {
-                        console::write_line( "\r\ninterrupt" );
-
-                        if( on_interrupt )
-                        {
-                            on_interrupt();
-                        }
-                        else
-                        {
-                            active = false;
-                        }
-                        break;
-                    }
-                    case keycode::key_return:
-                    {
-                        co_yield stream.str();
-                        stream.str("");
-                        continue;
-                    }
-                    case keycode::key_tab:
-                    {
-                        std::cout << "tab!\r\n";
-                        co_yield stream.str();
-                        stream.str("");
-                        continue;
-                    }
-                    case keycode::read_more:
-                    {
-                        read_more = true;
-                        break;
-                    }
-                    default:
-                    {
-                        console::write_line( "{} is a control character", static_cast< int >( key ) );
-                        continue;
-                    }
+                    console::write_line( "{} is a control character", static_cast< int >( input ) );
+                    continue;
                 }
             }
         }
