@@ -6,6 +6,7 @@ add_executable( completor
     src/main.cpp
     src/console.cpp
     src/keyboard.cpp
+    src/line_buffer.cpp
 )
 
 target_include_directories( completor

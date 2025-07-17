@@ -26,6 +26,7 @@ int main( int argc, char **argv )
         console::write_line( "\rgot a line: {}", line );
     }
 
-    console::write_line( "bye" );
+    std::cout << "\r\nbye\r\n";
+
     return 0;
 }

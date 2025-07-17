@@ -1,5 +1,6 @@
 #include "keyboard.hpp"
 #include "console.hpp"
+#include "line_buffer.hpp"
 
 #include <cctype>
 #include <cstdio>
@@ -94,7 +95,6 @@ namespace input
             if( !std::iscntrl( input ) )
             {
                 co_yield { input, false };
-                continue;
             }
             else if( input == keycode::read_more )
             {
@@ -108,56 +108,14 @@ namespace input
         }
     }
 
-    struct buffer
-    {
-        std::string line;
-        std::string::iterator pos = line.begin();
-
-        std::string cycle()
-        {
-            std::string result = line;
-            line.clear();
-            pos = line.begin();
-            return result;
-        }
-
-        size_t size() const
-        {
-            return line.size();
-        }
-
-        size_t position()
-        {
-            return static_cast< size_t >( std::distance< std::string::iterator >( line.begin(), pos ) );
-        }
-
-        void insert( char input )
-        {
-            line.insert( pos++, input );
-            std::cout << input << std::flush;
-        }
-
-        void move( size_t offset )
-        {
-            pos = line.begin() + offset;
-            std::cout << console::cursor::to_column( offset ) << std::flush;
-        }
-
-        void restore()
-        {
-            // restore state
-        }
-    };
-
     std::generator< std::string_view > keyboard::lines()
     {
-        buffer line;
+        line_buffer line;
 
         for( auto [input, is_special] : filtered_keys() )
         {
             if( !is_special )
             {
-                // std::cout << input << std::flush;
                 line.insert( input );
                 continue;
             }
@@ -194,7 +152,7 @@ namespace input
                 }
                 case keycode::key_right:
                 {
-                    line.move( std::min< int >( line.size() + 1, line.position() + 1 ) );
+                    line.move( line.position() + 1 );
                     break;
                 }
                 case keycode::key_backspace:
@@ -212,7 +170,9 @@ namespace input
                 }
                 default:
                 {
+                    std::cout << console::erase::line();
                     console::write_line( "\r{} is a control character", static_cast< int >( input ) );
+                    line.restore();
                     continue;
                 }
             }

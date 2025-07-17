@@ -13,7 +13,6 @@ namespace console
         write_line( std::vformat( format, std::make_format_args( args... ) ) );
     }
 
-    // constexpr std::string esc( std::string_view code );
     constexpr std::string esc( std::string_view code )
     {
         return std::format( "\e{}", code );
