@@ -9,16 +9,16 @@ namespace  input
     struct line_buffer
     {
         std::vector< char > line;
-        std::vector< char >::iterator pos;
+        size_t cursor;
 
         line_buffer();
 
         std::string cycle();
         size_t size() const;
-        size_t position();
+
         void insert( char input );
+        void erase( size_t position );
         void move( size_t offset );
         void restore();
     };
-
 }

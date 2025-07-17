@@ -88,22 +88,23 @@ namespace input
         static constexpr char key_delete = '3';
     }
 
-    std::generator< std::pair<char, bool> > keyboard::filtered_keys()
+    std::generator< std::pair< char, is_special > > keyboard::filtered_keys()
     {
         for( char input : keys() )
         {
+
             if( !std::iscntrl( input ) )
             {
-                co_yield { input, false };
+                co_yield { input, is_special::no };
             }
             else if( input == keycode::read_more )
             {
                 const std::array< char, 2 > special { read_key(), read_key() };
-                co_yield { special[1], true };
+                co_yield { special[1], is_special::yes };
             }
             else
             {
-                co_yield { input, true };
+                co_yield { input, is_special::yes };
             }
         }
     }
@@ -112,9 +113,9 @@ namespace input
     {
         line_buffer line;
 
-        for( auto [input, is_special] : filtered_keys() )
+        for( auto [input, type] : filtered_keys() )
         {
-            if( !is_special )
+            if( type == is_special::no )
             {
                 line.insert( input );
                 continue;
@@ -147,33 +148,40 @@ namespace input
                 }
                 case keycode::key_left:
                 {
-                    line.move( std::max< int >( 0, line.position() - 1 ) );
+                    line.move( std::max< int >( 0, line.cursor - 1 ) );
                     break;
                 }
                 case keycode::key_right:
                 {
-                    line.move( line.position() + 1 );
+                    line.move( line.cursor + 1 );
                     break;
                 }
                 case keycode::key_backspace:
                 {
+                    line.erase( line.cursor - 1 );
+                    break;
+                }
+                case keycode::key_delete:
+                {
+                    line.erase( line.cursor );
+                    read_key();
                     break;
                 }
                 case keycode::key_return:
                 {
                     co_yield line.cycle();
-                    continue;
+                    break;
                 }
                 case keycode::key_tab:
                 {
-                    continue;
+                    break;
                 }
                 default:
                 {
                     std::cout << console::erase::line();
                     console::write_line( "\r{} is a control character", static_cast< int >( input ) );
                     line.restore();
-                    continue;
+                    break;
                 }
             }
         }

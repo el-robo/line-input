@@ -3,19 +3,24 @@
 #include <generator>
 #include <string_view>
 
-namespace input {
-
-struct keyboard
+namespace input
 {
-    std::function< void() > on_interrupt;
-    bool active = true;
+    enum class is_special
+    {
+        yes,
+        no
+    };
 
-    keyboard();
+    struct keyboard
+    {
+        std::function< void() > on_interrupt;
+        bool active = true;
 
-    char read_key();
-    std::generator< char > keys();
-    std::generator< std::pair< char, bool > > filtered_keys();
-    std::generator< std::string_view > lines();
-};
+        keyboard();
 
+        char read_key();
+        std::generator< char > keys();
+        std::generator< std::pair< char, is_special > > filtered_keys();
+        std::generator< std::string_view > lines();
+    };
 }
