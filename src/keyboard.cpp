@@ -70,36 +70,13 @@ namespace input
         }
     }
 
-    // namespace key::code
-    // {
-    //     static constexpr char key_interrupt = 3;
-    //     static constexpr char key_end_of_input = 4;
-    //     static constexpr char key_tab = 9;
-    //     static constexpr char key_return = 13;
-    //     static constexpr char key_ctrl_backspace = 23;
-    //     static constexpr char key_modifier_combo = 49;
-    //     static constexpr char escape_code = 27;
-    //     static constexpr char key_backspace = 127;
-
-    //     // keys with the '[' special prefix
-    //     static constexpr char key_up = 'A';
-    //     static constexpr char key_down = 'B';
-    //     static constexpr char key_right = 'C';
-    //     static constexpr char key_left = 'D';
-    //     static constexpr char key_home = 'H';
-    //     static constexpr char key_end = 'F';
-    //     static constexpr char key_insert = '3';
-    //     static constexpr char key_delete = '3';
-    // }
-
-    std::generator< std::variant< char, key::special > > keyboard::filtered_keys()
+    std::generator< std::variant< char, special > > keyboard::filtered_keys()
     {
         std::vector< char > buffer;
         buffer.reserve( 10 );
 
         for( char input : keys() )
         {
-            int val( input );
             if( !std::iscntrl( input ) )
             {
                 co_yield input;
@@ -108,19 +85,18 @@ namespace input
 
             switch( input )
             {
-                case key::code::escape_code:
+                case code::escape_code:
                 {
                     buffer.clear();
                     read_available( std::back_inserter( buffer ) );
-
-                    interject( "escaped: {}", std::string( buffer.begin(), buffer.end() ) );
-                    co_yield key::interpret( buffer );
+                    co_yield interpret_sequence( buffer );
                     break;
                 }
 
                 default:
                 {
-                    co_yield key::special { input };
+                    co_yield special { interpret_code( input ) };
+                    break;
                 }
             }
         }
@@ -128,26 +104,26 @@ namespace input
 
     std::generator< std::string_view > keyboard::lines()
     {
-        // for( auto [input, type] : filtered_keys() )
         for( auto variant : filtered_keys() )
         {
             bool cycle_buffer = false;
 
-            const auto handle_value = [ & ]( auto&& input )
+            const auto handle_value = [ & ]( auto&& value )
             {
-                using T = std::decay_t< decltype( input ) >;
+                using T = std::decay_t< decltype( value ) >;
 
                 if constexpr( std::is_same_v< T, char > )
                 {
-                    line.insert( input );
+                    line.insert( value );
                     return;
                 }
                 else
                 {
-                    switch( input.code )
+                    // is a special key
+                    switch( value.input )
                     {
-                        case key::code::key_end_of_input:
-                        case key::code::key_interrupt:
+                        case key::eof:
+                        case key::interrupt:
                         {
                             if( on_interrupt )
                             {
@@ -159,49 +135,47 @@ namespace input
                             }
                             break;
                         }
-                        case key::code::key_home:
+                        case key::home:
                         {
                             line.move( 0 );
                             break;
                         }
-                        case key::code::key_end:
+                        case key::end:
                         {
                             line.move( line.size() + 1 );
                             break;
                         }
-                        case key::code::key_left:
+                        case key::arrow_left:
                         {
                             line.move( std::max< int >( 0, line.cursor - 1 ) );
                             break;
                         }
-                        case key::code::key_right:
+                        case key::arrow_right:
                         {
                             line.move( line.cursor + 1 );
                             break;
                         }
-                        case key::code::key_backspace:
+                        case key::backspace:
                         {
                             line.erase( line.cursor - 1 );
                             break;
                         }
-                        case key::code::key_delete:
+                        case key::delete_key:
                         {
                             line.erase( line.cursor );
-                            read_key();
                             break;
                         }
-                        case key::code::key_return:
+                        case key::return_key:
                         {
                             cycle_buffer = true;
                             break;
                         }
-                        case key::code::key_tab:
+                        case key::tab:
                         {
                             break;
                         }
                         default:
                         {
-                            interject( "{} is a control character", static_cast< int >( input.code ) );
                             break;
                         }
                     }

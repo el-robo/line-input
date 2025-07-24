@@ -29,7 +29,7 @@ namespace input
 
         char read_key( wait = wait::yes );
         std::generator< char > keys();
-        std::generator< std::variant< char, key::special > > filtered_keys();
+        std::generator< std::variant< char, special > > filtered_keys();
         std::generator< std::string_view > lines();
 
         template< typename T >
