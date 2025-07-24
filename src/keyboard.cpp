@@ -1,5 +1,6 @@
 #include "keyboard.hpp"
 #include "console.hpp"
+#include "interpret_keys.hpp"
 #include "line_buffer.hpp"
 
 #include <cctype>
@@ -45,13 +46,13 @@ namespace input
         enable_raw_mode();
     }
 
-    char keyboard::read_key()
+    char keyboard::read_key( wait on_no_input  )
     {
-        char input = '\0';
+        char input = null_char;
 
         while( active )
         {
-            if( read( STDIN_FILENO, &input, 1 ) == 1 )
+            if( read( STDIN_FILENO, &input, 1 ) == 1 || on_no_input == wait::no )
             {
                 break;
             }
@@ -59,6 +60,7 @@ namespace input
 
         return input;
     }
+
 
     std::generator< char > keyboard::keys()
     {
@@ -68,121 +70,149 @@ namespace input
         }
     }
 
-    namespace keycode
-    {
-        static constexpr char key_interrupt = 3;
-        static constexpr char key_end_of_input = 4;
-        static constexpr char key_tab = 9;
-        static constexpr char key_return = 13;
-        static constexpr char read_more = 27;
-        static constexpr char key_backspace = 127;
+    // namespace key::code
+    // {
+    //     static constexpr char key_interrupt = 3;
+    //     static constexpr char key_end_of_input = 4;
+    //     static constexpr char key_tab = 9;
+    //     static constexpr char key_return = 13;
+    //     static constexpr char key_ctrl_backspace = 23;
+    //     static constexpr char key_modifier_combo = 49;
+    //     static constexpr char escape_code = 27;
+    //     static constexpr char key_backspace = 127;
 
-        // keys with the '[' special prefix
-        static constexpr char key_up = 'A';
-        static constexpr char key_down = 'B';
-        static constexpr char key_right = 'C';
-        static constexpr char key_left = 'D';
-        static constexpr char key_home = 'H';
-        static constexpr char key_end = 'F';
-        static constexpr char key_insert = '3';
-        static constexpr char key_delete = '3';
-    }
+    //     // keys with the '[' special prefix
+    //     static constexpr char key_up = 'A';
+    //     static constexpr char key_down = 'B';
+    //     static constexpr char key_right = 'C';
+    //     static constexpr char key_left = 'D';
+    //     static constexpr char key_home = 'H';
+    //     static constexpr char key_end = 'F';
+    //     static constexpr char key_insert = '3';
+    //     static constexpr char key_delete = '3';
+    // }
 
-    std::generator< std::pair< char, is_special > > keyboard::filtered_keys()
+    std::generator< std::variant< char, key::special > > keyboard::filtered_keys()
     {
+        std::vector< char > buffer;
+        buffer.reserve( 10 );
+
         for( char input : keys() )
         {
-
+            int val( input );
             if( !std::iscntrl( input ) )
             {
-                co_yield { input, is_special::no };
+                co_yield input;
+                continue;
             }
-            else if( input == keycode::read_more )
+
+            switch( input )
             {
-                const std::array< char, 2 > special { read_key(), read_key() };
-                co_yield { special[1], is_special::yes };
-            }
-            else
-            {
-                co_yield { input, is_special::yes };
+                case key::code::escape_code:
+                {
+                    buffer.clear();
+                    read_available( std::back_inserter( buffer ) );
+
+                    interject( "escaped: {}", std::string( buffer.begin(), buffer.end() ) );
+                    co_yield key::interpret( buffer );
+                    break;
+                }
+
+                default:
+                {
+                    co_yield key::special { input };
+                }
             }
         }
     }
 
     std::generator< std::string_view > keyboard::lines()
     {
-        line_buffer line;
-
-        for( auto [input, type] : filtered_keys() )
+        // for( auto [input, type] : filtered_keys() )
+        for( auto variant : filtered_keys() )
         {
-            if( type == is_special::no )
-            {
-                line.insert( input );
-                continue;
-            }
+            bool cycle_buffer = false;
 
-            switch( input )
+            const auto handle_value = [ & ]( auto&& input )
             {
-                case keycode::key_end_of_input:
-                case keycode::key_interrupt:
+                using T = std::decay_t< decltype( input ) >;
+
+                if constexpr( std::is_same_v< T, char > )
                 {
-                    if( on_interrupt )
+                    line.insert( input );
+                    return;
+                }
+                else
+                {
+                    switch( input.code )
                     {
-                        on_interrupt();
+                        case key::code::key_end_of_input:
+                        case key::code::key_interrupt:
+                        {
+                            if( on_interrupt )
+                            {
+                                on_interrupt();
+                            }
+                            else
+                            {
+                                active = false;
+                            }
+                            break;
+                        }
+                        case key::code::key_home:
+                        {
+                            line.move( 0 );
+                            break;
+                        }
+                        case key::code::key_end:
+                        {
+                            line.move( line.size() + 1 );
+                            break;
+                        }
+                        case key::code::key_left:
+                        {
+                            line.move( std::max< int >( 0, line.cursor - 1 ) );
+                            break;
+                        }
+                        case key::code::key_right:
+                        {
+                            line.move( line.cursor + 1 );
+                            break;
+                        }
+                        case key::code::key_backspace:
+                        {
+                            line.erase( line.cursor - 1 );
+                            break;
+                        }
+                        case key::code::key_delete:
+                        {
+                            line.erase( line.cursor );
+                            read_key();
+                            break;
+                        }
+                        case key::code::key_return:
+                        {
+                            cycle_buffer = true;
+                            break;
+                        }
+                        case key::code::key_tab:
+                        {
+                            break;
+                        }
+                        default:
+                        {
+                            interject( "{} is a control character", static_cast< int >( input.code ) );
+                            break;
+                        }
                     }
-                    else
-                    {
-                        active = false;
-                    }
-                    break;
                 }
-                case keycode::key_home:
-                {
-                    line.move( 0 );
-                    break;
-                }
-                case keycode::key_end:
-                {
-                    line.move( line.size() + 1 );
-                    break;
-                }
-                case keycode::key_left:
-                {
-                    line.move( std::max< int >( 0, line.cursor - 1 ) );
-                    break;
-                }
-                case keycode::key_right:
-                {
-                    line.move( line.cursor + 1 );
-                    break;
-                }
-                case keycode::key_backspace:
-                {
-                    line.erase( line.cursor - 1 );
-                    break;
-                }
-                case keycode::key_delete:
-                {
-                    line.erase( line.cursor );
-                    read_key();
-                    break;
-                }
-                case keycode::key_return:
-                {
-                    co_yield line.cycle();
-                    break;
-                }
-                case keycode::key_tab:
-                {
-                    break;
-                }
-                default:
-                {
-                    std::cout << console::erase::line();
-                    console::write_line( "\r{} is a control character", static_cast< int >( input ) );
-                    line.restore();
-                    break;
-                }
+            };
+
+            std::visit( handle_value, variant );
+
+            if( cycle_buffer )
+            {
+                co_yield line.cycle();
             }
         }
     }

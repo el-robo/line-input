@@ -19,6 +19,8 @@ namespace  input
         void insert( char input );
         void erase( size_t position );
         void move( size_t offset );
+
+        /* restore the buffer to output */
         void restore();
     };
 }
