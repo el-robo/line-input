@@ -46,6 +46,8 @@ namespace input
         static constexpr char key_tab = 9;
         static constexpr char key_return = 13;
         static constexpr char escape_code = 27;
+        static constexpr char key_ctrl_backspace = 8;
+        static constexpr char key_ctrl_backspace2 = 23;
         static constexpr char key_backspace = 127;
 
         static constexpr char key_up = 'A';
@@ -55,7 +57,7 @@ namespace input
         static constexpr char key_home = 'H';
         static constexpr char key_end = 'F';
         static constexpr char key_insert = '3';
-        static constexpr char key_delete = '3';
+        static constexpr char key_delete = 'd';
     }
 
     /* values correspond to the bitmask in the modifier value */
@@ -78,6 +80,20 @@ namespace input
         }
     };
 
-    special interpret_sequence( std::span< char > sequence );
-    key interpret_code( char code );
+    std::bitset< 4 > modifier_mask( modifier modifier, auto ... modifiers, std::bitset< 4 > mask = {} )
+    {
+        mask.set( static_cast< int >( modifier ) );
+
+        if constexpr( sizeof...( modifiers ) )
+        {
+            return modifier_mask( modifiers..., mask );
+        }
+        else
+        {
+            return mask;
+        }
+    }
+
+    special interpret_escape_sequence( std::span< char > sequence );
+    special interpret_code( char code, int modifiers = 0 );
 }

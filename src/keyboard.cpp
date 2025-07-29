@@ -11,6 +11,7 @@
 #include <iterator>
 #include <sstream>
 #include <string>
+#include <string_view>
 #include <termios.h>
 #include <unistd.h>
 
@@ -89,17 +90,63 @@ namespace input
                 {
                     buffer.clear();
                     read_available( std::back_inserter( buffer ) );
-                    co_yield interpret_sequence( buffer );
+                    interject( "seq: {}", std::string_view( buffer.begin(), buffer.end() ) );
+                    co_yield interpret_escape_sequence( buffer );
                     break;
                 }
 
                 default:
                 {
+                    interject( "code: {}", static_cast< int >( input ) );
                     co_yield special { interpret_code( input ) };
                     break;
                 }
             }
         }
+    }
+
+    bool is_boundary( char in )
+    {
+        return in == ' ';
+    }
+
+    template< int direction >
+    inline constexpr auto sentinel( const auto &range )
+    {
+        if constexpr( direction > 0 )
+        {
+            return range.end();
+        }
+        else
+        {
+            return range.begin();
+        }
+    }
+
+    template< int direction >
+    auto find_boundary( line_buffer &line )
+    {
+        using namespace std::ranges;
+
+        auto it = line.iterator();
+        const auto end = sentinel< direction >( line.buffer );
+        advance( it, direction, end );
+
+        while( it != end )
+        {
+            advance( it, direction, end );
+
+            if( is_boundary( *it ) )
+            {
+                if constexpr( direction < 0 )
+                {
+                    advance( it, -1 * direction );
+                }
+                break;
+            }
+        }
+
+        return it;
     }
 
     std::generator< std::string_view > keyboard::lines()
@@ -147,21 +194,47 @@ namespace input
                         }
                         case key::arrow_left:
                         {
+                            if( value.held( modifier::control ) )
+                            {
+                                line.move( find_boundary< -1 >( line ) );
+                                break;
+                            }
+
                             line.move( std::max< int >( 0, line.cursor - 1 ) );
                             break;
                         }
                         case key::arrow_right:
                         {
+                            if( value.held( modifier::control ) )
+                            {
+                                line.move( find_boundary< 1 >( line ) );
+                                break;
+                            }
+
                             line.move( line.cursor + 1 );
                             break;
                         }
                         case key::backspace:
                         {
+                            if( value.held( modifier::control ) )
+                            {
+                                auto start = line.iterator();
+                                line.erase( find_boundary< -1 >( line ), start );
+                                break;
+                            }
+
                             line.erase( line.cursor - 1 );
                             break;
                         }
                         case key::delete_key:
                         {
+                            if( value.held( modifier::control ) )
+                            {
+                                auto start = line.iterator();
+                                line.erase( start, find_boundary< 1 >( line ) );
+                                break;
+                            }
+
                             line.erase( line.cursor );
                             break;
                         }

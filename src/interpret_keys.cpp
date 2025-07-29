@@ -41,41 +41,58 @@ namespace input
 
         special interpret( std::span< char > sequence )
         {
-            const int vt_code = from_chars< int >(
-                sequence.data() + 1,
-                sequence.data() + sequence.size() - 1
-            );
+            int modifiers = 0;
 
-            auto found = vt::keys.find( vt_code );
+            auto code_end = std::ranges::find( sequence, ';' );
 
-            if( found == vt::keys.end() )
+            if( code_end != sequence.end() )
             {
-                return {};
+                modifiers = from_chars< int >(
+                    &*(code_end + 1),
+                    sequence.data() + sequence.size() - 2
+                ) - 1;
             }
 
-            return { found->second };
+            const int vt_code = from_chars< int >(
+                sequence.data() + 1,
+                &*code_end
+            );
+
+            if( auto found = vt::keys.find( vt_code ); found != vt::keys.end() )
+            {
+                return { found->second, modifiers };
+            }
+
+            return {};
         }
     }
 
-    static const std::map< char, key > codes
+    static const std::map< char, special > codes
     {
-        { code::key_interrupt, key::interrupt },
-        { code::key_end_of_input, key::eof },
-        { code::key_tab, key::tab },
-        { code::key_return, key::return_key },
-        { code::escape_code, key::escape },
-        { code::key_backspace, key::backspace },
-        { code::key_up, key::arrow_up },
-        { code::key_down, key::arrow_down },
-        { code::key_right, key::arrow_right },
-        { code::key_left, key::arrow_left },
-        { code::key_home, key::home },
-        { code::key_end, key::end },
-        { code::key_insert, key::insert },
-        { code::key_delete, key::delete_key }
+        { code::key_interrupt, { key::interrupt } },
+        { code::key_end_of_input, { key::eof } },
+        { code::key_tab, { key::tab } },
+        { code::key_return, { key::return_key } },
+        { code::escape_code, { key::escape } },
+        { code::key_ctrl_backspace, { key::backspace, modifier_mask( modifier::control ) } },
+        { code::key_ctrl_backspace2, { key::backspace, modifier_mask( modifier::control ) } },
+        { code::key_backspace, { key::backspace } },
+        { code::key_up, { key::arrow_up } },
+        { code::key_down, { key::arrow_down } },
+        { code::key_right, { key::arrow_right } },
+        { code::key_left, { key::arrow_left } },
+        { code::key_home, { key::home } },
+        { code::key_end, { key::end } },
+        { code::key_insert, { key::insert } },
+        { code::key_delete, { key::delete_key } }
     };
 
-    special interpret_sequence( std::span< char > sequence )
+    static const std::map< char, std::bitset< 4 > > implied_modifiers_when_escaped =
+    {
+        { code::key_delete, modifier_mask( modifier::control ) }
+    };
+
+    special interpret_escape_sequence( std::span< char > sequence )
     {
         if( sequence.empty() )
         {
@@ -94,22 +111,31 @@ namespace input
         {
             modifiers = from_chars< int >(
                 &*(found + 1),
-                sequence.data() + sequence.size() - 2
+                sequence.data() + sequence.size() - 1
             ) - 1;
         }
 
-        return { interpret_code( *key_it ), modifiers };
+        auto result = interpret_code( *key_it, modifiers );
+
+        if( auto found = implied_modifiers_when_escaped.find( *key_it ); found != implied_modifiers_when_escaped.end() )
+        {
+            result.modifiers |= found->second;
+        }
+
+        return result;
     }
 
-    key interpret_code( char code )
+    special interpret_code( char code, int modifiers )
     {
         auto found = codes.find( code );
 
         if( found == codes.end() )
         {
-            return key::invalid;
+            return {};
         }
 
-        return found->second;
+        auto result = found->second;
+        result.modifiers |= modifiers;
+        return result;
     }
 }
